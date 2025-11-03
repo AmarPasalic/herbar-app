@@ -19,7 +19,7 @@ async function run() {
     // Signup
     const signupRes = await request(app)
         .post('/api/auth/signup')
-        .send({ email, password })
+        .send({ email, password, fullName: 'Test User', department: 'Informatika', school: 'Gimnazija' })
         .set('Content-Type', 'application/json');
     console.log('Signup status:', signupRes.status);
     if (signupRes.status !== 201 && signupRes.status !== 409) {
