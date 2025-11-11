@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import serverless from 'serverless-http';
+// Removed serverless-http; Vercel's @vercel/node expects a (req, res) handler
 import { app } from './app.js';
 import { connectToMongo } from './lib/mongo.js';
 
@@ -25,13 +25,21 @@ async function start() {
     }
 }
 
-// Export serverless handler for Vercel
-const sls = serverless(app);
-export async function handler(req, res) {
-    await connectToMongo();
-    return sls(req, res);
+// Export Express-compatible handler for Vercel
+export default async function handler(req, res) {
+    try {
+        await connectToMongo();
+    } catch (e) {
+        // If DB connect fails, still respond with a 500 instead of hanging
+        console.error('Mongo connection error in handler:', e);
+        res.statusCode = 500;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'db_connect_failed' }));
+        return;
+    }
+    // Delegate to Express app
+    return app(req, res);
 }
-export default handler;
 
 // Start HTTP server only outside Vercel/serverless and tests
 if (!IS_VERCEL && process.env.NODE_ENV !== 'test') {
