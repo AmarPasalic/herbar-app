@@ -1,156 +1,159 @@
-Fronted req,res 
-Here’s the minimal API contract your frontend needs to call and what it gets back.
+# Herbar Backend API Guide
 
-Base URL
+Comprehensive API contract and integration notes for the Herbar frontend.
 
-Local dev: http://localhost:3001 (or the port you run on)
-Auth
+## Base URLs
+- Local: http://localhost:3001
+- Production: https://<your-vercel-app>.vercel.app
 
-Send Authorization: Bearer <token> for protected routes.
-Signup
+Set API_URL in your frontend (e.g., NEXT_PUBLIC_API_URL or VITE_API_URL) and prefix all requests.
 
-Request:
-POST /api/auth/signup
-Headers: Content-Type: application/json
-Body: { "email": string, "password": string }
-Success (201):
-{ "token": string, "user": { "id": string, "email": string } }
-Errors: 400 (missing fields), 409 (email in use), 500 { "error": string }
-Login
+## Authentication
+- JWT Bearer tokens.
+- Signup/Login return { token, user }.
+- Add header: Authorization: Bearer <token> for protected routes.
 
-Request:
-POST /api/auth/login
-Headers: Content-Type: application/json
-Body: { "email": string, "password": string }
-Success (200):
-{ "token": string, "user": { "id": string, "email": string } }
-Errors: 400, 401, 500 { "error": string }
-Add plant
+## Data Models
+User:
+{
+  "id": "string",
+  "email": "string",
+  "fullName": "string",
+  "department": "string",
+  "school": "string"
+}
 
-Request:
-POST /api/plants
+Plant:
+{
+  "id": "string",
+  "name": "string",
+  "description": "string",
+  "photoUrl": "string|null",
+  "ownerId": "string",
+  "createdAt": "ISO string",
+  "updatedAt": "ISO string"
+}
+
+## Endpoints
+
+### POST /api/auth/signup
+Body (JSON):
+{
+  "email": "user@example.com",
+  "password": "secret",
+  "fullName": "Ime Prezime",
+  "department": "Informatika",
+  "school": "Gimnazija"
+}
+
+Success 201:
+{ "token": "...", "user": User }
+
+Errors: 400 (missing), 409 (duplicate), 500.
+
+### POST /api/auth/login
+Body (JSON):
+{ "email": "user@example.com", "password": "secret" }
+
+Success 200:
+{ "token": "...", "user": { "id": "...", "email": "..." } }
+
+Errors: 400, 401, 500.
+
+### POST /api/plants
 Headers: Authorization: Bearer <token>
 Content-Type: multipart/form-data
-Fields:
-name: string (required)
-description: string (optional)
-photo: File (optional)
-Success (201):
-{ "plant": { "id": string, "name": string, "description": string, "photoUrl": string|null, "ownerId": string, "createdAt": string, "updatedAt": string } }
-Errors: 400 (missing name), 401 (no/invalid token), 500 { "error": string }
-List plants
+Fields: name (required), description (optional), photo (file optional)
 
-Request:
-GET /api/plants
+Success 201:
+{ "plant": Plant }
+
+Errors: 400, 401, 500.
+
+### GET /api/plants
 Headers: Authorization: Bearer <token>
-Success (200):
-{ "plants": Array<Plant> } with the same plant shape as above
-Errors: 401, 500 { "error": string }
-Notes
 
-If a plant has a photo, photoUrl is a path like /uploads/<filename> (serve it by hitting that URL on the same base).
-Store the JWT token client-side (e.g., localStorage) and attach it on protected calls.
-Example (fetch)
+Success 200:
+{ "plants": [Plant, ...] }
 
-Signup/Login:
-const res = await fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email, password}) })
-const { token, user } = await res.json()
+Errors: 401, 500.
+
+### GET /api/health
+Success 200:
+{ "ok": true, "mongo": "connected" }
+
+Note: In production, this may be blocked by Vercel Deployment Protection (401) if enabled.
+
+## Fetch Examples
+Login:
+const res = await fetch(`${API_URL}/api/auth/login`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email, password })
+});
+const { token, user } = await res.json();
+
 Add plant:
-const fd = new FormData(); fd.append('name', name); if (description) fd.append('description', description); if (file) fd.append('photo', file)
-await fetch('/api/plants', { method:'POST', headers:{ Authorization: Bearer ${token} }, body: fd })
-List:
-await fetch('/api/plants', { headers:{ Authorization: Bearer ${token} } })
+const fd = new FormData();
+fd.append('name', name);
+if (description) fd.append('description', description);
+if (file) fd.append('photo', file);
+await fetch(`${API_URL}/api/plants`, {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${token}` },
+  body: fd
+});
 
+List plants:
+const res = await fetch(`${API_URL}/api/plants`, {
+  headers: { Authorization: `Bearer ${token}` }
+});
+const { plants } = await res.json();
 
+## Images
+- Local (no Cloudinary): photoUrl like /uploads/<filename>; render with `${API_URL}${photoUrl}`.
+- Production with Cloudinary: absolute HTTPS URL (persistent).
+- Production without Cloudinary: not persistent (avoid relying on it).
 
+## Rate Limits (defaults)
+- Auth: ~100 requests / 15 min / IP
+- Plant create: ~25 requests / hour / IP
 
+## CORS
+- Dev: open.
+- Prod: set CORS_ORIGIN to allowed origins (comma-separated).
 
+## Environment Variables (Backend)
+Required: JWT_SECRET, MONGODB_URI
+Optional: CORS_ORIGIN, CLOUDINARY_URL or (CLOUDINARY_CLOUD_NAME/CLOUDINARY_API_KEY/CLOUDINARY_API_SECRET), RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX, RATE_LIMIT_PLANT_CREATE_MAX, MONGO_CONNECT_ATTEMPTS
 
+## Frontend Checklist
+1. Set API_URL
+2. Implement signup/login; store token safely
+3. Attach bearer token header
+4. If photoUrl doesn’t start with http, prefix with API_URL
+5. Handle 401 by redirecting to login
 
+## Error Format
+All errors return JSON: { "error": "message" }
 
+## Quick Start (Backend Dev)
+1) cp .env.example .env
+2) npm install
+3) docker compose up -d   # or run local mongod
+4) npm run dev
 
+Server runs at http://localhost:3001
 
+## Deployment (Vercel)
+1. Push repo
+2. Import in Vercel
+3. Set env vars
+4. Deploy (API under /api)
+5. Configure Cloudinary for durable images
 
-# Herbar Backend
-
-Node.js/Express backend for the Herbar app with MongoDB storage.
-
-Endpoints:
-- POST /api/auth/signup
-- POST /api/auth/login
-- POST /api/plants (with photo)
-- GET /api/plants
-
-## Quick start
-
-1) Env + install
-```sh
-cp .env.example .env
-npm install
-```
-
-2) Start MongoDB (choose one)
-- Local Mongo (brew): ensure mongod is running on mongodb://127.0.0.1:27017
-- Docker:
-```sh
-docker compose up -d
-```
-
-3) Run the server
-```sh
-npm run dev
-```
-Dev server: http://localhost:3001 (set PORT in .env or script)
-
-## API
-
-- POST /api/auth/signup
-  - body: { email, password }
-  - returns: { token, user }
-
-- POST /api/auth/login
-  - body: { email, password }
-  - returns: { token, user }
-
-- POST /api/plants
-  - headers: Authorization: Bearer <token>
-  - content-type: multipart/form-data
-  - fields: name (required), description (optional), photo (file, optional)
-  - returns: { plant }
-
-- GET /api/plants
-  - headers: Authorization: Bearer <token>
-  - returns: { plants: [...] }
-
-Uploads are served at /uploads/<filename>.
-
-## Config
-- JWT_SECRET: required for auth tokens
-- MONGODB_URI: e.g. mongodb://127.0.0.1:27017/herbar
-- CORS_ORIGIN: comma-separated list of allowed origins in production (e.g., https://your-frontend.app)
-- Cloudinary (optional) to host images when deploying to serverless:
-  - CLOUDINARY_URL or CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
-
-## Notes
-- Data is now stored in MongoDB (Mongoose models: User, Plant). The JSON file store is deprecated.
-- For production: harden validation, add rate limiting, and configure persistent storage for Mongo.
-
-## Deploying to Vercel
-
-This repo includes `api/index.js` for serverless and `vercel.json` routing.
-
-Steps:
-1. Push this repo to GitHub.
-2. In Vercel, "Import Project" and select the repo.
-3. Set Environment Variables in Vercel (Project Settings -> Environment Variables):
-  - JWT_SECRET
-  - MONGODB_URI (Atlas connection string recommended)
-  - CORS_ORIGIN (your frontend origin, optional)
-  - CLOUDINARY_URL or CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET (optional, recommended for images)
-4. Deploy. Vercel will serve API at `/api/*`.
-
-Health check: GET `/api/health` returns `{ ok: true, mongo: "connected"|... }`.
-
-Local vs Production uploads:
-- Local dev without Cloudinary: files are stored under `/uploads` and served by the Express app.
-- On Vercel (serverless), you must use Cloudinary (or similar) since ephemeral storage isn't persistent. When Cloudinary is configured, `photoUrl` will be a remote URL.
+## Future Enhancements
+- Update/Delete plants
+- Pagination & filtering
+- Stronger validation (email/password)
+- Public plant sharing endpoint
