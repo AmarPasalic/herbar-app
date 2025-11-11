@@ -1,23 +1,18 @@
 {
     "version": 2,
-    "functions": {
-        "api/index.js": {
-            "runtime": "nodejs20.x",
-            "memory": 512,
-            "maxDuration": 10
+    "builds": [
+        {
+            "src": "api/index.js",
+            "use": "@vercel/node@3"
         }
-    },
-    "env": {
-        "NODE_ENV": "production"
-    },
+    ],
     "routes": [
         {
             "src": "/api/(.*)",
-            "dest": "/api/index.js"
-        },
-        {
-            "src": "/uploads/(.*)",
-            "dest": "/api/index.js"
+            "dest": "api/index.js"
         }
-    ]
+    ],
+    "env": {
+        "NODE_ENV": "production"
+    }
 }

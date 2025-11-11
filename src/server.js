@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import serverless from 'serverless-http';
 import { app } from './app.js';
 import { connectToMongo } from './lib/mongo.js';
 
@@ -10,6 +11,7 @@ if (!process.env.JWT_SECRET) {
 }
 
 const PORT = process.env.PORT || 3000;
+const IS_VERCEL = !!process.env.VERCEL;
 
 async function start() {
     try {
@@ -23,4 +25,15 @@ async function start() {
     }
 }
 
-start();
+// Export serverless handler for Vercel
+const sls = serverless(app);
+export async function handler(req, res) {
+    await connectToMongo();
+    return sls(req, res);
+}
+export default handler;
+
+// Start HTTP server only outside Vercel/serverless and tests
+if (!IS_VERCEL && process.env.NODE_ENV !== 'test') {
+    start();
+}
