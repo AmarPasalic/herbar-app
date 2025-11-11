@@ -5,23 +5,31 @@ import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import { authRequired } from '../middleware/auth.js';
 import { Plant } from '../models/Plant.js';
+import rateLimit from 'express-rate-limit';
+import { cloudinaryEnabled, cloudinary } from '../lib/cloudinary.js';
+import streamifier from 'streamifier';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
 
-const storage = multer.diskStorage({
-    destination: function (_req, _file, cb) {
-        cb(null, uploadsDir);
-    },
-    filename: function (_req, file, cb) {
-        const ext = path.extname(file.originalname);
-        cb(null, `${Date.now()}-${uuidv4()}${ext}`);
-    }
-});
-
-const upload = multer({ storage });
+let upload;
+if (cloudinaryEnabled) {
+    // Use memory storage and upload buffer to Cloudinary in handler
+    upload = multer({ storage: multer.memoryStorage() });
+} else {
+    const storage = multer.diskStorage({
+        destination: function (_req, _file, cb) {
+            cb(null, uploadsDir);
+        },
+        filename: function (_req, file, cb) {
+            const ext = path.extname(file.originalname);
+            cb(null, `${Date.now()}-${uuidv4()}${ext}`);
+        }
+    });
+    upload = multer({ storage });
+}
 
 const router = Router();
 
@@ -29,11 +37,31 @@ const router = Router();
 import fs from 'fs';
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
+// Rate limit creation (stricter)
+const createLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: parseInt(process.env.RATE_LIMIT_PLANT_CREATE_MAX || '25', 10), standardHeaders: true, legacyHeaders: false });
+
 // POST /api/plants - add a plant (multipart/form-data)
-router.post('/', authRequired, upload.single('photo'), async (req, res, next) => {
+router.post('/', authRequired, createLimiter, upload.single('photo'), async (req, res, next) => {
     const { name, description } = req.body || {};
     if (!name) return res.status(400).json({ error: 'Name is required' });
-    const photoFile = req.file ? `/uploads/${req.file.filename}` : null;
+    let photoFile = null;
+    if (req.file) {
+        if (cloudinaryEnabled) {
+            try {
+                photoFile = await new Promise((resolve, reject) => {
+                    const stream = cloudinary.uploader.upload_stream({ folder: 'herbar' }, (err, result) => {
+                        if (err) return reject(err);
+                        resolve(result.secure_url);
+                    });
+                    streamifier.createReadStream(req.file.buffer).pipe(stream);
+                });
+            } catch (errUpload) {
+                console.error('Cloudinary upload failed, continuing without photo:', errUpload.message);
+            }
+        } else {
+            photoFile = `/uploads/${req.file.filename}`;
+        }
+    }
     try {
         const plantDoc = await Plant.create({
             name,

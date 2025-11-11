@@ -127,7 +127,30 @@ Uploads are served at /uploads/<filename>.
 ## Config
 - JWT_SECRET: required for auth tokens
 - MONGODB_URI: e.g. mongodb://127.0.0.1:27017/herbar
+- CORS_ORIGIN: comma-separated list of allowed origins in production (e.g., https://your-frontend.app)
+- Cloudinary (optional) to host images when deploying to serverless:
+  - CLOUDINARY_URL or CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
 
 ## Notes
 - Data is now stored in MongoDB (Mongoose models: User, Plant). The JSON file store is deprecated.
 - For production: harden validation, add rate limiting, and configure persistent storage for Mongo.
+
+## Deploying to Vercel
+
+This repo includes `api/index.js` for serverless and `vercel.json` routing.
+
+Steps:
+1. Push this repo to GitHub.
+2. In Vercel, "Import Project" and select the repo.
+3. Set Environment Variables in Vercel (Project Settings -> Environment Variables):
+  - JWT_SECRET
+  - MONGODB_URI (Atlas connection string recommended)
+  - CORS_ORIGIN (your frontend origin, optional)
+  - CLOUDINARY_URL or CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET (optional, recommended for images)
+4. Deploy. Vercel will serve API at `/api/*`.
+
+Health check: GET `/api/health` returns `{ ok: true, mongo: "connected"|... }`.
+
+Local vs Production uploads:
+- Local dev without Cloudinary: files are stored under `/uploads` and served by the Express app.
+- On Vercel (serverless), you must use Cloudinary (or similar) since ephemeral storage isn't persistent. When Cloudinary is configured, `photoUrl` will be a remote URL.
